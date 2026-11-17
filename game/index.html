@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solara Bay — an open-world crime story</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1420; font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
+  #app, #app canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 5; }
+  #objective { position: absolute; top: 14px; left: 16px; max-width: 460px; background: rgba(10, 16, 28, 0.72); border-left: 4px solid #ffc93c; padding: 10px 14px; border-radius: 6px; font-size: 15px; line-height: 1.35; }
+  #message { position: absolute; top: 76px; left: 16px; background: rgba(10, 16, 28, 0.72); padding: 8px 12px; border-radius: 6px; font-size: 14px; opacity: 0; transition: opacity 0.4s; }
+  #top-right { position: absolute; top: 14px; right: 16px; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd75e; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
+  #stars.hot { color: #ff5340; animation: pulse 0.7s infinite alternate; }
+  @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+  #cash { font-size: 24px; font-weight: 700; color: #7dff9a; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
+  #clock { font-size: 14px; color: #cfe3ff; }
+  #health-bar { width: 180px; height: 12px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35); border-radius: 6px; margin: 6px 0 2px auto; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #7dff9a); transition: width 0.25s; }
+  #health-fill.low { background: linear-gradient(90deg, #d63737, #ff7a5e); }
+  #ammo { font-size: 13px; color: #ffe9a8; margin-top: 2px; }
+  #minimap { position: absolute; left: 16px; bottom: 16px; width: 190px; height: 190px; border: 2px solid rgba(255,255,255,0.5); border-radius: 50%; background: #1e6f8e; box-shadow: 0 4px 18px rgba(0,0,0,0.55); }
+  #speed { position: absolute; right: 18px; bottom: 16px; font-size: 30px; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.8); display: none; }
+  #subtitle { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); max-width: 640px; text-align: center; font-size: 17px; background: rgba(0,0,0,0.66); padding: 10px 18px; border-radius: 8px; opacity: 0; transition: opacity 0.4s; line-height: 1.4; }
+  #hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.75); text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,0.9); box-shadow: 0 0 4px #000; }
+  #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #crosshair::after { top: 6px; left: 0; width: 14px; height: 2px; }
+  #damage { position: fixed; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,0.55) 100%); opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.2s; }
+  /* ---------- Menus ---------- */
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 10; background: linear-gradient(180deg, rgba(8,12,24,0.25) 0%, rgba(8,12,24,0.82) 78%); text-align: center; padding: 20px; }
+  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 6px; color: #ffc93c; text-shadow: 0 4px 0 #b3541e, 0 8px 24px rgba(0,0,0,0.8); font-style: italic; }
+  .screen h2 { font-size: 15px; font-weight: 400; color: #ffe9a8; margin: 6px 0 22px; letter-spacing: 2px; text-transform: uppercase; }
+  .screen p { max-width: 560px; line-height: 1.55; font-size: 15px; color: #e8eef7; }
+  .menu-btn { pointer-events: auto; display: block; width: 260px; margin: 6px auto; padding: 13px 18px; font-size: 16px; font-weight: 700; color: #101623; background: #ffc93c; border: none; border-radius: 8px; cursor: pointer; }
+  .menu-btn:hover { background: #ffd75e; }
+  .menu-btn.ghost { background: rgba(255,255,255,0.14); color: #fff; border: 1px solid rgba(255,255,255,0.5); }
+  .menu-btn.ghost:hover { background: rgba(255,255,255,0.25); }
+  #phone-list { display: flex; flex-direction: column; gap: 8px; width: 420px; max-width: 92vw; }
+  .phone-row { pointer-events: auto; text-align: left; padding: 12px 14px; font-size: 15px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; cursor: pointer; }
+  .phone-row:hover:not(:disabled) { background: rgba(255,201,60,0.25); }
+  .phone-row:disabled { opacity: 0.45; cursor: default; }
+  .keys { display: grid; grid-template-columns: auto auto; gap: 4px 18px; text-align: left; font-size: 14px; margin: 10px 0 18px; }
+  .keys b { color: #ffc93c; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="damage"></div>
+
+<div id="hud">
+  <div id="objective">No mission active. Press M to open the phone.</div>
+  <div id="message"></div>
+  <div id="top-right">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="cash">$120</div>
+    <div id="clock">17:30</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="ammo">AMMO 12/12</div>
+  </div>
+  <canvas id="minimap" width="190" height="190"></canvas>
+  <div id="speed">0 km/h</div>
+  <div id="subtitle"></div>
+  <div id="hint">WASD move &middot; E enter / steal car &middot; Click shoot &middot; M phone &middot; Esc pause</div>
+  <div id="crosshair"></div>
+</div>
+
+<div id="start-screen" class="screen">
+  <h1>SOLARA BAY</h1>
+  <h2>An open-world crime story</h2>
+  <p>You are <b>Dario Cruz</b>, a driver-for-hire new to Solara Bay — a sun-soaked
+  coastal city of traffic, palms and trouble. Steal cars, lose the cops, run five
+  jobs for the crew, and make a name for yourself. Everything you see is original:
+  the city, the people and the story are ours alone.</p>
+  <button id="new-btn" class="menu-btn">New Game</button>
+  <button id="continue-btn" class="menu-btn ghost">Continue</button>
+  <button id="howto-btn" class="menu-btn ghost">How to Play</button>
+  <p style="font-size:12px; color:#9fb2cc;">Keyboard + mouse &middot; progress saves in your browser</p>
+</div>
+
+<div id="howto" class="screen">
+  <h1 style="font-size:38px;">HOW TO PLAY</h1>
+  <div class="keys">
+    <b>W A S D</b><span>Move / drive</span>
+    <b>Shift</b><span>Sprint on foot</span>
+    <b>Mouse drag</b><span>Orbit the camera</span>
+    <b>Wheel</b><span>Zoom</span>
+    <b>E</b><span>Enter, exit or steal a car</span>
+    <b>Click</b><span>Shoot (on foot)</span>
+    <b>R</b><span>Reload</span>
+    <b>Space</b><span>Handbrake while driving</span>
+    <b>M</b><span>Phone — missions</span>
+    <b>P</b><span>Mute sound</span>
+    <b>Esc</b><span>Pause</span>
+  </div>
+  <p>Crimes raise your wanted level: stealing cars, hitting pedestrians, shooting.
+  Cops chase you in cars and on foot — get busted or wasted and you lose 20% of
+  your cash at the clinic. Lay low and the stars fade.</p>
+  <button id="howto-close" class="menu-btn">Got it</button>
+</div>
+
+<div id="pause-menu" class="screen">
+  <h1 style="font-size:38px;">PAUSED</h1>
+  <button id="resume-btn" class="menu-btn">Resume</button>
+  <button id="save-btn" class="menu-btn ghost">Save Game</button>
+  <button id="mute-btn" class="menu-btn ghost">Sound: ON</button>
+  <button id="restart-btn" class="menu-btn ghost">Quit to Title</button>
+</div>
+
+<div id="phone-menu" class="screen">
+  <h1 style="font-size:38px;">📱 &nbsp;MARCUS — JOBS</h1>
+  <p>Pick a job. Jobs open in order; finish one to unlock the next.</p>
+  <div id="phone-list"></div>
+  <button id="phone-close" class="menu-btn ghost">Close Phone</button>
+</div>
+
+<div id="end-card" class="screen">
+  <h1 id="end-title" style="font-size:44px;">BUSTED</h1>
+  <p id="end-text"></p>
+  <button id="end-continue" class="menu-btn">Back to the Streets</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
