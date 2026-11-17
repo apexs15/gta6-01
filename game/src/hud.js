@@ -129,6 +129,11 @@ export class HUD {
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
+    // Compass: N sits at the top of the map (map +z is down, so north is up).
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', W / 2, 13);
     // Traffic: yellow dots. Police: flashing blue/red.
     for (const car of state.traffic) {
       const [x, z] = this.toMap(car.mesh.position.x, car.mesh.position.z);

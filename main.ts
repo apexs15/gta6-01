@@ -39,4 +39,5 @@ writeFileSync(
 // A one-line summary of what was handed in, so a local run shows its shape.
 const shotNames = existsSync(join(out, 'screenshots')) ? readdirSync(join(out, 'screenshots')) : [];
 const dossierBytes = statSync(join(out, 'dossier.json')).size;
+if (shotNames.length < 3) console.warn(`solara-bay: warning: only ${shotNames.length} screenshot(s) — the gate wants 3-4`);
 console.log(`solara-bay: game/ + ${shotNames.length} screenshot(s) + dossier.json (${dossierBytes} bytes) -> ${out}`);
