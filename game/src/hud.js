@@ -1,167 +1,150 @@
-// The HUD: DOM overlays (stars, cash, health, objective, speed), a 2D canvas
-// minimap, and the start / pause / phone menus. The game owns state; the HUD
-// only renders it.
-import { CITY } from './config.js';
+// Solara Bay — HUD: health, cash, wanted stars, ammo, speed, mission text,
+// the minimap (with its N compass), the phone menu and toast messages.
 
-function el(id) {
-  return document.getElementById(id);
-}
+import { MISSIONS, PHONE_TITLE, WORLD } from './config.js';
 
-export class HUD {
-  constructor(city) {
-    this.city = city;
-    this.minimap = el('minimap');
-    this.mapCtx = this.minimap.getContext('2d');
-    this.messageTimer = 0;
-    this.subtitleTimer = 0;
-    this.damageTimer = 0;
-    this.mapScale = this.minimap.width / (CITY.bound * 2 + 120);
+export class Hud {
+  constructor() {
+    this.el = {
+      health: document.getElementById('health-fill'),
+      cash: document.getElementById('cash'),
+      stars: document.getElementById('stars'),
+      ammo: document.getElementById('ammo'),
+      speed: document.getElementById('speed'),
+      mission: document.getElementById('mission-label'),
+      objective: document.getElementById('objective-label'),
+      timer: document.getElementById('timer-label'),
+      toast: document.getElementById('toast'),
+      phone: document.getElementById('phone'),
+      phoneList: document.getElementById('phone-list'),
+      crosshair: document.getElementById('crosshair'),
+      interact: document.getElementById('interact-hint'),
+    };
+    this.minimap = document.getElementById('minimap');
+    this.mm = this.minimap ? this.minimap.getContext('2d') : null;
+    this.toastTimer = 0;
+    this.buildPhone();
   }
 
-  toMap(x, z) {
-    const s = this.mapScale;
-    const cx = this.minimap.width / 2;
-    const cy = this.minimap.height / 2;
-    return [cx + x * s, cy + z * s];
+  buildPhone() {
+    if (!this.el.phoneList) return;
+    this.el.phoneList.innerHTML = '';
+    MISSIONS.forEach((m, i) => {
+      const row = document.createElement('div');
+      row.className = 'phone-job';
+      row.dataset.index = String(i);
+      row.innerHTML = `<b>${i + 1}. ${m.name}</b><span>$${m.reward} — ${m.giver}</span><em>${m.brief}</em>`;
+      row.addEventListener('click', () => {
+        if (this.onPickJob) this.onPickJob(i);
+      });
+      this.el.phoneList.appendChild(row);
+    });
   }
 
-  setObjective(text) {
-    el('objective').textContent = text;
+  markJobsDone(doneSet, activeIndex) {
+    if (!this.el.phoneList) return;
+    const rows = this.el.phoneList.querySelectorAll('.phone-job');
+    rows.forEach((row, i) => {
+      row.classList.toggle('done', doneSet.has(MISSIONS[i].id));
+      row.classList.toggle('active', i === activeIndex);
+    });
   }
 
-  showMessage(text, seconds = 4) {
-    const m = el('message');
-    m.textContent = text;
-    m.style.opacity = '1';
-    this.messageTimer = seconds;
+  setPhoneOpen(open) {
+    if (this.el.phone) this.el.phone.classList.toggle('open', open);
   }
 
-  showSubtitle(text, seconds = 5) {
-    const s = el('subtitle');
-    s.textContent = text;
-    s.style.opacity = '1';
-    this.subtitleTimer = seconds;
+  isPhoneOpen() {
+    return !!(this.el.phone && this.el.phone.classList.contains('open'));
   }
 
-  flashDamage() {
-    this.damageTimer = 0.35;
-    el('damage').style.opacity = '0.45';
+  toast(msg, seconds) {
+    if (!this.el.toast) return;
+    this.el.toast.textContent = msg;
+    this.el.toast.classList.add('show');
+    this.toastTimer = seconds || 3;
   }
 
-  setStars(n) {
-    const stars = el('stars');
-    stars.textContent = '★'.repeat(n) + '☆'.repeat(5 - n);
-    stars.classList.toggle('hot', n >= 3);
+  update(dt, s) {
+    if (this.toastTimer > 0) {
+      this.toastTimer -= dt;
+      if (this.toastTimer <= 0 && this.el.toast) this.el.toast.classList.remove('show');
+    }
+    if (this.el.health) this.el.health.style.width = Math.max(0, s.health) + '%';
+    if (this.el.cash) this.el.cash.textContent = '$' + Math.floor(s.cash);
+    if (this.el.stars) {
+      this.el.stars.textContent = '★'.repeat(s.wanted) + '☆'.repeat(Math.max(0, 5 - s.wanted));
+      this.el.stars.classList.toggle('hot', s.wanted > 0);
+    }
+    if (this.el.ammo) this.el.ammo.textContent = s.reloading ? 'RELOADING…' : `AMMO ${s.ammo}/12`;
+    if (this.el.speed) this.el.speed.textContent = s.inCar ? Math.round(Math.abs(s.speedKmh)) + ' km/h' : '';
+    if (this.el.mission) this.el.mission.textContent = s.missionName || 'No job — open the phone (P)';
+    if (this.el.objective) this.el.objective.textContent = s.objective || '';
+    if (this.el.timer) {
+      this.el.timer.textContent = s.timerLeft > 0 ? Math.ceil(s.timerLeft) + 's' : '';
+    }
+    if (this.el.crosshair) this.el.crosshair.style.display = s.inCar ? 'none' : 'block';
+    if (this.el.interact) {
+      this.el.interact.style.display = s.interactHint ? 'block' : 'none';
+      if (s.interactHint) this.el.interact.textContent = s.interactHint;
+    }
+    this.drawMinimap(s);
   }
 
-  setCash(cash) {
-    el('cash').textContent = `$${Math.floor(cash).toLocaleString('en-US')}`;
-  }
-
-  setHealth(hp) {
-    const bar = el('health-fill');
-    bar.style.width = `${Math.max(0, Math.min(100, hp))}%`;
-    bar.classList.toggle('low', hp < 30);
-  }
-
-  setAmmo(ammo, reloading) {
-    el('ammo').textContent = reloading ? 'RELOADING…' : `AMMO ${ammo}/12`;
-  }
-
-  setSpeed(kmh, inCar) {
-    const s = el('speed');
-    s.style.display = inCar ? 'block' : 'none';
-    if (inCar) s.textContent = `${Math.round(kmh)} km/h`;
-  }
-
-  setClock(minutes) {
-    const h = Math.floor(minutes / 60) % 24;
-    const m = Math.floor(minutes % 60);
-    el('clock').textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-
-  drawMinimap(state) {
-    const ctx = this.mapCtx;
+  drawMinimap(s) {
+    if (!this.mm) return;
+    const ctx = this.mm;
     const W = this.minimap.width;
     const H = this.minimap.height;
+    const span = 380;
+    const toX = (x) => ((x + span / 2) / span) * W;
+    const toY = (z) => ((z + span / 2) / span) * H;
     ctx.clearRect(0, 0, W, H);
-    // Water west, land, roads.
-    ctx.fillStyle = '#1e6f8e';
+    ctx.fillStyle = '#1d2b1a';
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#3d5a3a';
-    const [lx] = this.toMap(-CITY.bound, 0);
-    ctx.fillRect(lx, 0, W - lx, H);
-    ctx.fillStyle = '#e8cf9a';
-    const [bx] = this.toMap(-CITY.beachX, 0);
-    ctx.fillRect(bx, 0, lx - bx, H);
-    // Buildings.
-    ctx.fillStyle = '#2c3440';
-    for (const b of this.city.buildings) {
-      const [x1, z1] = this.toMap(b.x - b.w / 2, b.z - b.d / 2);
-      const [x2, z2] = this.toMap(b.x + b.w / 2, b.z + b.d / 2);
-      ctx.fillRect(x1, z1, x2 - x1, z2 - z1);
-    }
+    // Sea on the east edge.
+    ctx.fillStyle = '#2a6a9a';
+    ctx.fillRect(toX(WORLD.WATER_X), 0, W - toX(WORLD.WATER_X), H);
     // Roads.
-    ctx.strokeStyle = '#565d66';
-    ctx.lineWidth = Math.max(2, 12 * this.mapScale);
-    for (const c of CITY.roads) {
-      const [x1, z1] = this.toMap(c, -CITY.bound);
-      const [x2, z2] = this.toMap(c, CITY.bound);
+    ctx.strokeStyle = '#555a60';
+    ctx.lineWidth = 3;
+    for (const c of WORLD.ROADS) {
       ctx.beginPath();
-      ctx.moveTo(x1, z1);
-      ctx.lineTo(x2, z2);
+      ctx.moveTo(toX(c), 0);
+      ctx.lineTo(toX(c), H);
       ctx.stroke();
-      const [x3, z3] = this.toMap(-CITY.bound, c);
-      const [x4, z4] = this.toMap(CITY.bound, c);
       ctx.beginPath();
-      ctx.moveTo(x3, z3);
-      ctx.lineTo(x4, z4);
+      ctx.moveTo(0, toY(c));
+      ctx.lineTo(W, toY(c));
       ctx.stroke();
     }
-    // Mission marker: gold star.
-    if (state.marker) {
-      const [mx, my] = this.toMap(state.marker.x, state.marker.z);
-      ctx.fillStyle = '#ffc93c';
-      ctx.beginPath();
-      ctx.arc(mx, my, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+    // Mission marker.
+    if (s.marker) {
+      ctx.fillStyle = '#ffd23e';
+      ctx.save();
+      ctx.translate(toX(s.marker.x), toY(s.marker.z));
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-5, -5, 10, 10);
+      ctx.restore();
     }
-    // Compass: N sits at the top of the map (map +z is down, so north is up).
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('N', W / 2, 13);
-    // Traffic: yellow dots. Police: flashing blue/red.
-    for (const car of state.traffic) {
-      const [x, z] = this.toMap(car.mesh.position.x, car.mesh.position.z);
-      ctx.fillStyle = '#f5c518';
-      ctx.fillRect(x - 1.5, z - 1.5, 3, 3);
+    // Traffic dots.
+    ctx.fillStyle = '#bbbbbb';
+    for (const c of s.trafficDots || []) {
+      ctx.fillRect(toX(c.x) - 1.5, toY(c.z) - 1.5, 3, 3);
     }
-    const flash = Math.floor(performance.now() / 300) % 2 === 0;
-    for (const cop of state.cops) {
-      const [x, z] = this.toMap(cop.mesh.position.x, cop.mesh.position.z);
-      ctx.fillStyle = flash ? '#ff2222' : '#2266ff';
+    // Police dots.
+    ctx.fillStyle = '#ff4040';
+    for (const c of s.policeDots || []) {
       ctx.beginPath();
-      ctx.arc(x, z, 3.5, 0, Math.PI * 2);
+      ctx.arc(toX(c.x), toY(c.z), 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    for (const g of state.guards) {
-      const [x, z] = this.toMap(g.mesh.position.x, g.mesh.position.z);
-      ctx.fillStyle = '#ff5533';
-      ctx.fillRect(x - 2, z - 2, 4, 4);
-    }
-    // Player: white arrow. Map +x is right and +z is down, so a heading h
-    // (forward = sin h, cos h) needs a rotation of PI - h from "up".
-    const [px, py] = this.toMap(state.playerX, state.playerZ);
+    // Player arrow, rotated by heading. The arrow is drawn pointing up,
+    // and the map's down axis is world +z, so the angle is PI - heading.
     ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(Math.PI - state.heading);
+    ctx.translate(toX(s.px), toY(s.pz));
+    ctx.rotate(Math.PI - s.heading);
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, -7);
     ctx.lineTo(5, 6);
@@ -169,80 +152,16 @@ export class HUD {
     ctx.lineTo(-5, 6);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
     ctx.restore();
-  }
-
-  update(dt, state) {
-    if (this.messageTimer > 0) {
-      this.messageTimer -= dt;
-      if (this.messageTimer <= 0) el('message').style.opacity = '0';
-    }
-    if (this.subtitleTimer > 0) {
-      this.subtitleTimer -= dt;
-      if (this.subtitleTimer <= 0) el('subtitle').style.opacity = '0';
-    }
-    if (this.damageTimer > 0) {
-      this.damageTimer -= dt;
-      if (this.damageTimer <= 0) el('damage').style.opacity = '0';
-    }
-    this.drawMinimap(state);
-  }
-
-  // --- menus ---------------------------------------------------------------
-  showStart(saveExists) {
-    el('start-screen').style.display = 'flex';
-    el('hud').style.display = 'none';
-    el('continue-btn').style.display = saveExists ? 'block' : 'none';
-  }
-
-  hideStart() {
-    el('start-screen').style.display = 'none';
-    el('hud').style.display = 'block';
-  }
-
-  showPause() {
-    el('pause-menu').style.display = 'flex';
-  }
-
-  hidePause() {
-    el('pause-menu').style.display = 'none';
-  }
-
-  showPhone(list) {
-    const menu = el('phone-menu');
-    const body = el('phone-list');
-    body.innerHTML = '';
-    for (const m of list) {
-      const row = document.createElement('button');
-      row.className = 'phone-row';
-      row.disabled = !m.available || m.done;
-      row.textContent = `${m.done ? '✓ ' : ''}${m.title} — $${m.reward}${m.active ? ' (ACTIVE)' : ''}`;
-      row.dataset.index = m.index;
-      body.appendChild(row);
-    }
-    menu.style.display = 'flex';
-  }
-
-  hidePhone() {
-    el('phone-menu').style.display = 'none';
-  }
-
-  showHowTo() {
-    el('howto').style.display = 'flex';
-  }
-
-  hideHowTo() {
-    el('howto').style.display = 'none';
-  }
-
-  showEndCard(title, text) {
-    el('end-title').textContent = title;
-    el('end-text').textContent = text;
-    el('end-card').style.display = 'flex';
-  }
-
-  hideEndCard() {
-    el('end-card').style.display = 'none';
+    // Compass: N sits at the top of the minimap.
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', W / 2, 14);
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.moveTo(W / 2, 18);
+    ctx.lineTo(W / 2, 28);
+    ctx.stroke();
   }
 }

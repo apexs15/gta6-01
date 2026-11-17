@@ -1,48 +1,39 @@
-// Keyboard + mouse state. The game reads this, never raw events, so the play-test
-// and the screenshot autopilot can drive the same interface.
+// Solara Bay — keyboard and mouse input. Keys are tracked by code so the
+// layout does not depend on the player's keyboard language.
+
 export class Input {
   constructor(canvas) {
     this.keys = new Set();
     this.mouseDown = false;
     this.mouseClicked = false;
-    this.dragDX = 0;
-    this.dragDY = 0;
-    this.wheel = 0;
+    this.cameraOrbit = 0;
     this.canvas = canvas;
-    this.dragging = false;
-    this.lastX = 0;
-    this.lastY = 0;
-
+    this.onKey = null;
+    this.onShoot = null;
     window.addEventListener('keydown', (e) => {
-      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.repeat) return;
       this.keys.add(e.code);
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      if (e.code === 'ArrowLeft') this.cameraOrbit += 0.35;
+      if (e.code === 'ArrowRight') this.cameraOrbit -= 0.35;
+      if (this.onKey) this.onKey(e.code);
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
-
-    canvas.addEventListener('mousedown', (e) => {
-      this.mouseDown = true;
-      this.mouseClicked = true;
-      this.dragging = true;
-      this.lastX = e.clientX;
-      this.lastY = e.clientY;
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
     });
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('blur', () => {
+      this.keys.clear();
       this.mouseDown = false;
-      this.dragging = false;
     });
-    window.addEventListener('mousemove', (e) => {
-      if (!this.dragging) return;
-      this.dragDX += e.clientX - this.lastX;
-      this.dragDY += e.clientY - this.lastY;
-      this.lastX = e.clientX;
-      this.lastY = e.clientY;
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        this.mouseDown = true;
+        this.mouseClicked = true;
+        if (this.onShoot) this.onShoot();
+      }
     });
-    canvas.addEventListener('wheel', (e) => {
-      this.wheel += e.deltaY;
-      e.preventDefault();
-    }, { passive: false });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.mouseDown = false;
+    });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -50,16 +41,11 @@ export class Input {
     return this.keys.has(code);
   }
 
-  axis(neg, pos) {
-    return (this.keys.has(pos) ? 1 : 0) - (this.keys.has(neg) ? 1 : 0);
-  }
-
-  // Movement axes in camera space: forward/back, strafe.
-  move() {
-    return {
-      fwd: this.axis('KeyS', 'KeyW') + this.axis('ArrowDown', 'ArrowUp'),
-      strafe: this.axis('KeyA', 'KeyD') + this.axis('ArrowLeft', 'ArrowRight'),
-    };
+  // Camera orbit nudges since the last frame (arrow keys), consumed once.
+  takeOrbit() {
+    const o = this.cameraOrbit;
+    this.cameraOrbit = 0;
+    return o;
   }
 
   consumeClick() {
@@ -68,16 +54,21 @@ export class Input {
     return c;
   }
 
-  consumeDrag() {
-    const d = { x: this.dragDX, y: this.dragDY };
-    this.dragDX = 0;
-    this.dragDY = 0;
-    return d;
+  moveVector() {
+    let x = 0;
+    let z = 0;
+    if (this.down('KeyW') || this.down('ArrowUp')) z -= 1;
+    if (this.down('KeyS') || this.down('ArrowDown')) z += 1;
+    if (this.down('KeyA')) x -= 1;
+    if (this.down('KeyD')) x += 1;
+    return { x, z };
   }
 
-  consumeWheel() {
-    const w = this.wheel;
-    this.wheel = 0;
-    return w;
+  get run() {
+    return this.down('ShiftLeft') || this.down('ShiftRight');
+  }
+
+  get interactHeld() {
+    return this.down('KeyE');
   }
 }

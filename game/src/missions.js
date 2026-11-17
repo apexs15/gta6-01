@@ -1,230 +1,180 @@
-// Missions and the story: five jobs for Dario Cruz, a driver-for-hire new to
-// Solara Bay. Each mission is a list of steps with a place, a radius and a line
-// of dialogue; the game advances steps as the player reaches them.
+// Solara Bay — missions: five jobs from Marcus, each a chain of objectives,
+// ending in a story-complete screen.
+
 import * as THREE from 'three';
-import { PLACES, MISSIONS } from './config.js';
-import { dist2D } from './random.js';
+import { MISSIONS, LANDMARKS } from './config.js';
+import { playPickup, playMissionDone } from './audio.js';
 
-// Step types: goto (reach a place), pickup (stand in the ring), wait (stand in
-// the ring for N seconds), deliver (reach a place in a car), survive (stay alive
-// with wanted >= 3 for N seconds), escape (reach a place with wanted >= 1).
-const STORY = [
-  {
-    title: 'First Fare',
-    intro: 'Dario: new in town, no cash, one borrowed jacket. Lena needs a ride to the Marina. Get in a car first, then pick her up.',
-    steps: [
-      { type: 'goto', place: 'cafe', radius: 6, text: "Go to Rosa's Cafe and pick up Lena." },
-      { type: 'deliver', place: 'marina', radius: 8, text: 'Drive Lena to the Marina. She pays on arrival.' },
-    ],
-    outro: 'Lena: "You drive like you mean it. There is more work if you want it."',
-  },
-  {
-    title: 'The Package',
-    intro: 'Vera needs a package from the Docks. No questions, no opening it. Grab it on foot and bring it to her bar.',
-    steps: [
-      { type: 'pickup', place: 'docks', radius: 5, text: 'Pick up the package at the Docks.' },
-      { type: 'goto', place: 'bar', radius: 6, text: "Deliver the package to Vera's Bar." },
-    ],
-    outro: 'Vera: "Sealed, on time. The crew notices that sort of thing."',
-  },
-  {
-    title: 'Hot Wheels',
-    intro: "Eddie wants a Comet GT from the dealership floor. It is not yours. Take it, and do not let the cops see you do it.",
-    steps: [
-      { type: 'steal', place: 'dealership', radius: 8, text: 'Steal the red Comet GT at Comet Motors.' },
-      { type: 'deliver', place: 'garage', radius: 8, text: "Deliver the Comet GT to Eddie's Garage." },
-    ],
-    outro: 'Eddie: "Clean plates by morning. You are earning a name, Dario."',
-  },
-  {
-    title: 'Heat',
-    intro: 'Someone tipped the precinct. The whole city is looking for you now. Stay alive with the heat on you for 45 seconds — then it dies down.',
-    steps: [
-      { type: 'survive', seconds: 45, text: 'Survive 45 seconds with 3 stars on you.' },
-    ],
-    outro: 'Marcus (phone): "They lost you. That is the whole trick, kid. Stay gone."',
-  },
-  {
-    title: 'The Big Score',
-    intro: 'The crew is hitting Solara Bank at dusk. Get inside, hold the vault for the crew, then run for the Hideout. The guards will not wave you through.',
-    steps: [
-      { type: 'goto', place: 'bank', radius: 7, text: 'Get to Solara Bank.' },
-      { type: 'wait', place: 'bank', radius: 5, seconds: 6, text: 'Hold the vault open: 6 seconds.' },
-      { type: 'escape', place: 'hideout', radius: 9, text: 'Escape to the Hideout with the cash!' },
-    ],
-    outro: 'Dario: "Solara Bay is ours now. At least until the next score."',
-  },
-];
-
-export class Missions {
+export class MissionManager {
   constructor(scene) {
     this.scene = scene;
-    this.index = -1; // -1: no mission active
-    this.step = 0;
-    this.stepTimer = 0;
-    this.done = false;
-    this.completed = new Set();
-    // The waypoint beacon: a gold pillar of light + a floating ring.
-    const beaconMat = new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
-    this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 60, 12, 1, true), beaconMat);
-    this.beacon.position.y = 30;
+    this.activeIndex = -1;
+    this.stepIndex = 0;
+    this.done = new Set();
+    this.holdMs = 0;
+    this.timerLeft = 0;
+    this.marker = null;
+    this.beacon = null;
+    this.onReward = null;
+    this.onStoryComplete = null;
+    this.onStep = null;
+    this.buildBeacon();
+  }
+
+  buildBeacon() {
+    const geo = new THREE.CylinderGeometry(0.35, 0.35, 60, 12, 1, true);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffd23e, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
+    this.beacon = new THREE.Mesh(geo, mat);
     this.beacon.visible = false;
-    scene.add(this.beacon);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
-    this.ring = new THREE.Mesh(new THREE.RingGeometry(2.4, 3.0, 24), ringMat);
-    this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.y = 0.12;
-    this.ring.visible = false;
-    scene.add(this.ring);
-    this.marker = null; // { x, z, label } for the HUD + minimap
-    this.onEvent = null; // (type, payload) — the game wires sound + messages here
+    this.scene.add(this.beacon);
+    const ringGeo = new THREE.RingGeometry(2.4, 3.2, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd23e, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+    this.marker = new THREE.Mesh(ringGeo, ringMat);
+    this.marker.rotation.x = -Math.PI / 2;
+    this.marker.position.y = 0.15;
+    this.marker.visible = false;
+    this.scene.add(this.marker);
   }
 
-  get current() {
-    return this.index >= 0 && this.index < STORY.length ? STORY[this.index] : null;
+  get active() {
+    return this.activeIndex >= 0 ? MISSIONS[this.activeIndex] : null;
   }
 
-  get currentStep() {
-    const m = this.current;
-    return m ? m.steps[this.step] : null;
+  get step() {
+    const m = this.active;
+    return m ? m.steps[this.stepIndex] : null;
   }
 
-  get currentPlace() {
-    const s = this.currentStep;
-    return s && s.place ? PLACES[s.place] : null;
-  }
-
-  get reward() {
-    return this.index >= 0 ? MISSIONS[this.index].reward : 0;
+  stepPos(step) {
+    if (!step || !step.at) return null;
+    const lm = LANDMARKS[step.at];
+    return lm ? { x: lm.x, z: lm.z } : null;
   }
 
   start(index) {
-    if (index < 0 || index >= STORY.length) return null;
-    this.index = index;
-    this.step = 0;
-    this.stepTimer = 0;
-    this.done = false;
-    this.updateMarker();
-    return STORY[index];
+    if (index < 0 || index >= MISSIONS.length) return false;
+    if (this.done.has(MISSIONS[index].id)) return false;
+    this.activeIndex = index;
+    this.stepIndex = 0;
+    this.holdMs = 0;
+    this.timerLeft = 0;
+    const step = this.step;
+    if (step && step.type === 'timed') this.timerLeft = step.seconds;
+    if (step && step.type === 'collect') {
+      // Heat Wave: the heat is on from the first pickup.
+      if (this.onHeat) this.onHeat();
+    }
+    this.placeMarker();
+    if (this.onStep) this.onStep(this.active, this.step, this.stepIndex);
+    return true;
   }
 
-  startNext() {
-    const next = this.completed.size === 0 ? 0 : Math.max(...this.completed) + 1;
-    if (next >= STORY.length) return null;
-    return this.start(next);
-  }
-
-  updateMarker() {
-    const place = this.currentPlace;
-    if (place) {
-      this.marker = { x: place.x, z: place.z, label: place.label };
-      this.beacon.position.set(place.x, 30, place.z);
-      this.beacon.visible = true;
-      this.ring.position.set(place.x, 0.12, place.z);
-      this.ring.visible = true;
-    } else {
-      this.marker = null;
+  placeMarker() {
+    const step = this.step;
+    const pos = this.stepPos(step);
+    if (!pos) {
       this.beacon.visible = false;
-      this.ring.visible = false;
+      this.marker.visible = false;
+      return;
     }
-  }
-
-  // Called every frame with the player's state. Returns a mission event string
-  // ('step', 'complete', 'failed') or null.
-  update(dt, player, inCar, wanted) {
-    const step = this.currentStep;
-    if (!step) return null;
-    const pos = player.mesh.position;
-    if (step.type === 'goto' || step.type === 'pickup' || step.type === 'deliver' || step.type === 'escape') {
-      const place = PLACES[step.place];
-      const d = dist2D(pos.x, pos.z, place.x, place.z);
-      if (step.type === 'deliver' && !inCar) return null;
-      if (step.type === 'escape' && wanted < 1) return null;
-      if (d <= step.radius) return this.advance();
-      return null;
-    }
-    if (step.type === 'wait') {
-      const place = PLACES[step.place];
-      const d = dist2D(pos.x, pos.z, place.x, place.z);
-      if (d <= step.radius) {
-        this.stepTimer += dt;
-        if (this.stepTimer >= step.seconds) return this.advance();
-      } else {
-        this.stepTimer = Math.max(0, this.stepTimer - dt * 2);
-      }
-      return null;
-    }
-    if (step.type === 'survive') {
-      if (wanted >= 3) {
-        this.stepTimer += dt;
-        if (this.stepTimer >= step.seconds) return this.advance();
-      }
-      return null;
-    }
-    if (step.type === 'steal') {
-      // The steal step completes when the player is driving the target car.
-      // The game sets this flag via completeStealStep() when the car is taken.
-      return null;
-    }
-    return null;
-  }
-
-  completeStealStep() {
-    const step = this.currentStep;
-    if (step && step.type === 'steal') return this.advance();
-    return null;
+    this.beacon.position.set(pos.x, 30, pos.z);
+    this.beacon.visible = true;
+    this.marker.position.set(pos.x, 0.15, pos.z);
+    this.marker.visible = true;
   }
 
   advance() {
-    this.step += 1;
-    this.stepTimer = 0;
-    const m = this.current;
-    if (this.step >= m.steps.length) {
-      this.completed.add(this.index);
-      this.done = true;
-      const reward = this.reward;
-      this.index = -1;
-      this.beacon.visible = false;
-      this.ring.visible = false;
-      this.marker = null;
-      if (this.onEvent) this.onEvent('complete', { reward, outro: m.outro });
-      return 'complete';
+    const m = this.active;
+    if (!m) return;
+    this.stepIndex++;
+    this.holdMs = 0;
+    if (this.stepIndex >= m.steps.length) {
+      this.complete(m);
+      return;
     }
-    this.updateMarker();
-    if (this.onEvent) this.onEvent('step', { text: m.steps[this.step].text });
-    return 'step';
+    const step = this.step;
+    if (step.type === 'timed') this.timerLeft = step.seconds;
+    if (step.type === 'collect' && this.onHeat) this.onHeat();
+    this.placeMarker();
+    if (this.onStep) this.onStep(m, step, this.stepIndex);
   }
 
-  abort() {
-    this.index = -1;
-    this.step = 0;
-    this.stepTimer = 0;
+  complete(mission) {
+    this.done.add(mission.id);
+    this.activeIndex = -1;
+    this.stepIndex = 0;
     this.beacon.visible = false;
-    this.ring.visible = false;
-    this.marker = null;
-  }
-
-  objectiveText() {
-    const m = this.current;
-    if (!m) return this.completed.size >= STORY.length
-      ? 'Story complete — free roam Solara Bay.'
-      : 'No mission active. Press M to open the phone.';
-    const step = m.steps[this.step];
-    let text = `${m.title}: ${step.text}`;
-    if (step.type === 'wait' || step.type === 'survive') {
-      text += ` (${Math.ceil(step.seconds - this.stepTimer)}s)`;
+    this.marker.visible = false;
+    playMissionDone();
+    if (this.onReward) this.onReward(mission.reward, mission);
+    if (this.done.size >= MISSIONS.length && this.onStoryComplete) {
+      this.onStoryComplete();
     }
-    return text;
   }
 
-  missionList() {
-    return STORY.map((m, i) => ({
-      index: i,
-      title: m.title,
-      reward: MISSIONS[i].reward,
-      done: this.completed.has(i),
-      active: this.index === i,
-      available: i === 0 || this.completed.has(i - 1),
-    }));
+  fail(reason) {
+    this.activeIndex = -1;
+    this.stepIndex = 0;
+    this.beacon.visible = false;
+    this.marker.visible = false;
+    if (this.onStep) this.onStep(null, null, -1, reason);
+  }
+
+  // Called every frame with the player's position, whether in a car, and
+  // whether E is held. Returns a short event string for the HUD, or null.
+  update(dt, px, pz, inCar, eHeld) {
+    if (!this.active) return null;
+    const step = this.step;
+    if (!step) return null;
+    if (step.type === 'timed') {
+      this.timerLeft -= dt;
+      if (this.timerLeft <= 0) {
+        this.fail('Too slow — the drop went cold.');
+        return 'failed';
+      }
+    }
+    if (step.type === 'steal') {
+      if (inCar) {
+        this.advance();
+        playPickup();
+        return 'stolen';
+      }
+      return null;
+    }
+    const pos = this.stepPos(step);
+    if (!pos) return null;
+    const d = Math.hypot(px - pos.x, pz - pos.z);
+    const radius = step.radius || 6;
+    if (step.type === 'goto' || step.type === 'collect') {
+      if (step.inCar && !inCar) return null;
+      if (d <= radius) {
+        this.advance();
+        playPickup();
+        return 'reached';
+      }
+      return null;
+    }
+    if (step.type === 'interact') {
+      if (d <= radius && eHeld) {
+        this.advance();
+        playPickup();
+        return 'picked';
+      }
+      return null;
+    }
+    if (step.type === 'hold') {
+      if (d <= radius && eHeld) {
+        this.holdMs += dt * 1000;
+        if (this.holdMs >= (step.holdMs || 3000)) {
+          this.advance();
+          playPickup();
+          return 'cracked';
+        }
+        return 'holding';
+      }
+      this.holdMs = 0;
+      return null;
+    }
+    return null;
   }
 }

@@ -4,53 +4,42 @@
 [![rank](https://make.fun/badge/gta6-01/apexs15/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/apexs15/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-An original open-world crime game in the spirit of GTA 6, built for the
-[make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01).
+An original 3D open-world crime game in the spirit of GTA 6, built with three.js. Play it at [make.fun/bounty/gta6-01](https://make.fun/bounty/gta6-01).
 
-You are **Dario Cruz**, a driver-for-hire new to **Solara Bay** — a sun-soaked
-coastal city of traffic, palms and trouble. Explore the city on foot and by car,
-steal cars, lose the cops, run five story jobs for the crew, and make a name for
-yourself.
+## The game
 
-## What is in the game
+You are **Dario Cruz**, new in Solara Bay and already in debt. **Marcus** has five jobs for you — pick them up on the phone (P) and finish them all to complete the story.
 
-- A 3D grid city with a beach and bay: roads, sidewalks, parks, a bank, a marina,
-  docks, a dealership and a garage — all original, built from procedural geometry.
-- On foot and by car: third-person controls, arcade driving with handbrake,
-  traffic AI that follows the road grid, pedestrians on the sidewalks.
-- Steal any car: traffic cars (the driver bails) and the red Comet GT.
-- A wanted system: 0–5 stars, police cars that chase and ram, officers on foot
-  who try to arrest you. Lay low and the heat fades; get busted or wasted and
-  you lose 20% of your cash at the clinic.
-- Five story missions with dialogue: First Fare, The Package, Hot Wheels, Heat,
-  The Big Score — plus free roam after the story.
-- Combat: a hitscan pistol, rival guards in the bank job, health and reload.
-- HUD with a live minimap (roads, traffic, police, mission marker), wanted stars,
-  health, cash, ammo, clock and speed.
-- Start screen, pause menu, mission phone, save/load in localStorage.
-- Synthesized sound: engine, sirens, gunshots, pickups and a bassline loop —
-  no audio files, no network.
+- **A city to explore** — 6×6 blocks of streets, buildings, a beach and the sea, on foot or by car.
+- **Traffic and pedestrians** — cars loop the block grid on their lanes and honk when you block them; pedestrians stroll the sidewalks and run from gunfire.
+- **Cars to steal and drive** — walk up to any car and press E. The cops will notice.
+- **A wanted level and police who respond** — 0 to 5 stars, police cars chase you down, and getting caught means BUSTED. Lose all your health and you're WASTED. Either way you pay 20% and wake up at Bay Clinic.
+- **Missions and a story** — five jobs from Marcus, from a simple package run at Rosa's Cafe to the Big Score at Solara Bank.
+- **Combat** — click or press F to shoot (12-round magazine, R reloads), raycast hits, wanted stars for every crime.
+- **HUD with a minimap** — health, cash, wanted stars, ammo, speed, mission objective, and a live minimap with a north compass.
+- **Start screen and saves** — progress is saved to localStorage; Continue picks up where you left off.
+
+## Controls
+
+| Key | Action |
+| --- | --- |
+| WASD | Move / drive |
+| Shift | Run |
+| E | Enter or steal a car / interact / get out |
+| Click or F | Shoot |
+| R | Reload |
+| P | Phone — Marcus's jobs |
+| 1–5 | Take a job from the phone |
+| ← → | Orbit the camera |
 
 ## Play it
 
-Serve `game/` with any static server and open `game/index.html` in desktop
-Chrome. No build step, no network request: three.js is vendored minified under
-`game/vendor/`.
+Serve `game/` with any static server and open `index.html`, or run `node serve.ts` if present. The game runs entirely from its own files — the only library is three.js, vendored under `game/vendor/`.
 
-```
-WASD move / drive · Shift sprint · Mouse drag orbit · Wheel zoom
-E enter / exit / steal car · Click shoot · R reload · Space handbrake
-M phone (missions) · P mute · Esc pause
+## Build the dossier
+
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
-## Files
-
-- `main.ts` — the entry program: copies `game/` and `screenshots/` to `/output`
-  and writes `/output/dossier.json` with the vendored make.fun library.
-- `game/` — the game: `index.html` plus `src/` modules (one job each) and
-  vendored three.js under `game/vendor/`.
-- `screenshots/` — four real renders of the game's own code.
-
-Everything in the game is original: the city, characters, vehicles, names, story,
-art and sound. Nothing from Rockstar Games' Grand Theft Auto series or any other
-commercial game.
+`main.ts` (Node 22) copies `game/` and `screenshots/` to the output directory and writes `dossier.json` with the kit's `buildDossier`.
