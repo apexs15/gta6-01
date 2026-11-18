@@ -1,74 +1,57 @@
-// Solara Bay — keyboard and mouse input. Keys are tracked by code so the
-// layout does not depend on the player's keyboard language.
+// Neon Harbor — keyboard + mouse input (fresh code for round 3).
+export const keys = Object.create(null);
+export const mouse = { x: 0, y: 0, down: false, worldX: 0, worldY: 0 };
+export const pressed = Object.create(null); // edge-triggered, consumed by game
 
-export class Input {
-  constructor(canvas) {
-    this.keys = new Set();
-    this.mouseDown = false;
-    this.mouseClicked = false;
-    this.cameraOrbit = 0;
-    this.canvas = canvas;
-    this.onKey = null;
-    this.onShoot = null;
-    window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
-      this.keys.add(e.code);
-      if (e.code === 'ArrowLeft') this.cameraOrbit += 0.35;
-      if (e.code === 'ArrowRight') this.cameraOrbit -= 0.35;
-      if (this.onKey) this.onKey(e.code);
-    });
-    window.addEventListener('keyup', (e) => {
-      this.keys.delete(e.code);
-    });
-    window.addEventListener('blur', () => {
-      this.keys.clear();
-      this.mouseDown = false;
-    });
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        this.mouseDown = true;
-        this.mouseClicked = true;
-        if (this.onShoot) this.onShoot();
-      }
-    });
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.mouseDown = false;
-    });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  }
+const KEYMAP = {
+  KeyW: 'up', ArrowUp: 'up',
+  KeyS: 'down', ArrowDown: 'down',
+  KeyA: 'left', ArrowLeft: 'left',
+  KeyD: 'right', ArrowRight: 'right',
+  KeyE: 'enter',
+  KeyR: 'reload',
+  KeyQ: 'phone',
+  KeyM: 'phone',
+  KeyC: 'continue',
+  Space: 'shoot',
+  Enter: 'confirm',
+  Escape: 'close',
+};
 
-  down(code) {
-    return this.keys.has(code);
-  }
+export function initInput(canvas) {
+  window.addEventListener('keydown', (e) => {
+    const name = KEYMAP[e.code];
+    if (name) {
+      if (!keys[name]) pressed[name] = true;
+      keys[name] = true;
+      if (name === 'shoot' || name === 'up' || name === 'down' || name === 'confirm') e.preventDefault();
+    }
+    if (e.code.startsWith('Digit')) pressed['digit' + e.code.slice(5)] = true;
+  });
+  window.addEventListener('keyup', (e) => {
+    const name = KEYMAP[e.code];
+    if (name) keys[name] = false;
+  });
+  canvas.addEventListener('mousemove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - r.left;
+    mouse.y = e.clientY - r.top;
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) { mouse.down = true; pressed.shoot = true; }
+  });
+  window.addEventListener('mouseup', () => { mouse.down = false; });
+  window.addEventListener('blur', () => {
+    for (const k of Object.keys(keys)) keys[k] = false;
+    mouse.down = false;
+  });
+}
 
-  // Camera orbit nudges since the last frame (arrow keys), consumed once.
-  takeOrbit() {
-    const o = this.cameraOrbit;
-    this.cameraOrbit = 0;
-    return o;
-  }
+export function consume(name) {
+  if (pressed[name]) { pressed[name] = false; return true; }
+  return false;
+}
 
-  consumeClick() {
-    const c = this.mouseClicked;
-    this.mouseClicked = false;
-    return c;
-  }
-
-  moveVector() {
-    let x = 0;
-    let z = 0;
-    if (this.down('KeyW') || this.down('ArrowUp')) z -= 1;
-    if (this.down('KeyS') || this.down('ArrowDown')) z += 1;
-    if (this.down('KeyA')) x -= 1;
-    if (this.down('KeyD')) x += 1;
-    return { x, z };
-  }
-
-  get run() {
-    return this.down('ShiftLeft') || this.down('ShiftRight');
-  }
-
-  get interactHeld() {
-    return this.down('KeyE');
-  }
+export function endFrame() {
+  for (const k of Object.keys(pressed)) pressed[k] = false;
 }

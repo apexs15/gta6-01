@@ -1,45 +1,37 @@
-# Solara Bay — Make GTA 6
+# Neon Harbor
 
 [![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![rank](https://make.fun/badge/gta6-01/apexs15/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/apexs15/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-An original 3D open-world crime game in the spirit of GTA 6, built with three.js. Play it at [make.fun/bounty/gta6-01](https://make.fun/bounty/gta6-01).
+**Neon Harbor** is a top-down 2D open-world crime game (GTA 1/2 style) set in a
+neon port city at night. You are **Mara Voss**, getaway driver, working five
+jobs for the harbor crew — and then the story ends at the lighthouse.
 
-## The game
+## How to play
 
-You are **Dario Cruz**, new in Solara Bay and already in debt. **Marcus** has five jobs for you — pick them up on the phone (P) and finish them all to complete the story.
+- **WASD** — walk / drive · **Mouse** — aim · **Click / Space** — shoot
+- **R** — reload (12-round mag) · **E** — steal a car / exit your car
+- **Q** — phone (jobs menu), press **1–5** to take a job
+- Wanted stars 0–5: the law chases you. Foot cops arrest you (**BUSTED**),
+  losing 20% of your cash; dying (**WASTED**) costs the same and respawns
+  you at the clinic. Lay low and the heat fades.
 
-- **A city to explore** — 6×6 blocks of streets, buildings, a beach and the sea, on foot or by car.
-- **Traffic and pedestrians** — cars loop the block grid on their lanes and honk when you block them; pedestrians stroll the sidewalks and run from gunfire.
-- **Cars to steal and drive** — walk up to any car and press E. The cops will notice.
-- **A wanted level and police who respond** — 0 to 5 stars, police cars chase you down, and getting caught means BUSTED. Lose all your health and you're WASTED. Either way you pay 20% and wake up at Bay Clinic.
-- **Missions and a story** — five jobs from Marcus, from a simple package run at Rosa's Cafe to the Big Score at Solara Bank.
-- **Combat** — click or press F to shoot (12-round magazine, R reloads), raycast hits, wanted stars for every crime.
-- **HUD with a minimap** — health, cash, wanted stars, ammo, speed, mission objective, and a live minimap with a north compass.
-- **Start screen and saves** — progress is saved to localStorage; Continue picks up where you left off.
+## The five jobs
 
-## Controls
+1. **Harbor Run** — crate from Pier 4 to the neon district, 90 seconds.
+2. **Clean Getaway** — steal the marked coupe, lose the cops, park it.
+3. **Dockside Deal** — meet the buyer, survive the ambush, bring the package back.
+4. **Neon Heist** — grab the casino cash on foot and outrun the whole precinct.
+5. **The Last Job** — pick up Leo, cross the bridge, end the crew, reach the lighthouse.
 
-| Key | Action |
-| --- | --- |
-| WASD | Move / drive |
-| Shift | Run |
-| E | Enter or steal a car / interact / get out |
-| Click or F | Shoot |
-| R | Reload |
-| P | Phone — Marcus's jobs |
-| 1–5 | Take a job from the phone |
-| ← → | Orbit the camera |
+## Features
 
-## Play it
+- 2400×2400 night city: grid streets, docks, neon district, lighthouse
+- Traffic AI + pedestrians who flee gunfire
+- Police cars and foot cops, wanted decay, BUSTED / WASTED fines
+- HUD (cash, health, ammo, wanted stars, mission tracker) + minimap with N compass
+- Start screen, localStorage save + Continue, WebAudio synth SFX (engine, sirens, gunfire)
 
-Serve `game/` with any static server and open `index.html`, or run `node serve.ts` if present. The game runs entirely from its own files — the only library is three.js, vendored under `game/vendor/`.
-
-## Build the dossier
-
-```sh
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-```
-
-`main.ts` (Node 22) copies `game/` and `screenshots/` to the output directory and writes `dossier.json` with the kit's `buildDossier`.
+Built for the [gta6-01 bounty on make.fun](https://make.fun/bounty/gta6-01).
+Run with Node 22: `node main.ts` (writes the dossier to `/output`).
